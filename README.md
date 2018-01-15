@@ -1,1 +1,1 @@
-"# Maya Plugins to Easify Animation" 
+# Maya Plugins to Easify Animation
