@@ -1,0 +1,13 @@
+
+For files please use:
+	Master_uniPiv_v2.1.py
+	uniPivotv2.0.ma
+
+NOTE: There needs to be a minium of TWO keyframes in order for the Animatable pivot to work. the first keyframe sets the location of the pivot before rotation and must be in step mode. The second keyframe holds the rotation values used in animation.
+
+To reset scene type 'reset()' into command line. 
+	--> If this does not work for some reason, reopen the scene without saving.
+
+Please contact tmarshall3d@hotmail.com for any questions
+
+
