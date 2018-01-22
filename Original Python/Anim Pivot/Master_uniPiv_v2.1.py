@@ -1,3 +1,4 @@
+import maya.cmds as Maya
 #Logic coded by Timothy Marshall © 2017
 
 #If we need to reset our scriptJob
@@ -17,24 +18,24 @@ def autoPivot():
     #Query what tool the user has selected
     tool = Maya.currentCtx(q = True)
     #Maya.setToolTo(tool)
-    
-    #Current tool is rotate tool        
+
+    #Current tool is rotate tool
     if tool == 'RotateSuperContext':
         animPivot()
 
     #Current tool is move tool
     elif tool == 'moveSuperContext':
         matchScript()
-    
+
     #Call our snapCommand() script
     snapCommand()
-      
-def snapCommand():    
+
+def snapCommand():
     #list of our controls to snap to
-    snapControls = ['controlX', 'controlY', 'controlZ']  
+    snapControls = ['controlX', 'controlY', 'controlZ']
     snap = []
-    
-    #check if the user has a selection  
+
+    #check if the user has a selection
     try:
         sel = Maya.ls(sl = True)[0]
 
@@ -46,19 +47,19 @@ def snapCommand():
             for i in range(0, 3):
                 snap.append((queryRp[i] + pos[i]))
             Maya.xform('controller', ws = True, translation = (snap[0], snap[1], snap[2]))
-        
+
         else:
             return
     except:
         return
 
-#Find the world space location of 
+#Find the world space location of
 def matchScript():
     rp = Maya.xform('locator1', q = True, ws = True, translation = True)
     Maya.xform('square1', ws = True, translation = (rp[0], rp[1], rp[2]))
     Maya.setAttr('square1.PointBool', 1)
 
-#Toggle the boolean of our point contraint off 
+#Toggle the boolean of our point contraint off
 def animPivot():
     Maya.setAttr('square1.PointBool', 0)
 

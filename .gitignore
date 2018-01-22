@@ -50,6 +50,8 @@ coverage.xml
 *.mo
 *.pot
 
+ikfkswitch/build/
+
 # Django stuff:
 *.log
 .static_storage/
