@@ -1,23 +1,17 @@
 #include "IkFkSwitchNode.h"
 
 MTypeId IkFkSwitchNode::id(0x0000232);
-/*MObject IkFkSwitchNode::aFollowerOut;
-MObject IkFkSwitchNode::aTargetM;
-MObject IkFkSwitchNode::aToggleMatch;
-MObject IkFkSwitchNode::aFollowerInvWorldM;
-MObject IkFkSwitchNode::inputMessage;
-MObject IkFkSwitchNode::aFollowerMessage;*/
-
 MObject IkFkSwitchNode::aFakeJoints;
 MObject IkFkSwitchNode::aRealJoints;
-
-MCallbackId inputId;
+MObject IkFkSwitchNode::aRealSelected;
+MObject IkFkSwitchNode::aFakeSelected;
+MObject IkFkSwitchNode::aSwitchBool;
 
 IkFkSwitchNode::IkFkSwitchNode() {
 }
 
 IkFkSwitchNode::~IkFkSwitchNode() {
-	detachCallbacks();
+
 }
 
 void* IkFkSwitchNode::creator() {
@@ -40,75 +34,34 @@ void IkFkSwitchNode::detachCallbacks() {
 MStatus IkFkSwitchNode::compute(const MPlug & plug, MDataBlock & data) {
 	MStatus status;
 
-	/*if (plug != aFollowerMessage) {
+	if (plug != aRealSelected && plug != aFakeSelected) {
+		MGlobal::displayInfo("SOMETHING ELSE CHANGED");
 		return MS::kUnknownParameter;
 	}
 
-	// Toggle match has been changed, that means we should match transform
-	// the two objects together
+	MGlobal::displayInfo("SWITCH BOOL CHANGED");
 
-	MDataHandle targetWorld = data.inputValue(aTargetM, &status);
-	CHECK_MSTATUS_AND_RETURN_IT(status);
-	MDataHandle outputWorldInv = data.inputValue(aFollowerInvWorldM, &status);
-	CHECK_MSTATUS_AND_RETURN_IT(status);
-	bool toggleMatch = data.inputValue(aToggleMatch, &status).asBool();
+	MDataHandle switchBool = data.inputValue(aSwitchBool, &status);
 	CHECK_MSTATUS_AND_RETURN_IT(status);
 
-	MFnMatrixData targetWorldD(targetWorld.data(), &status);
+	bool ik = switchBool.asBool();
+
+	// make this change reflect in realSelected and fakeSelected boolean
+	MDataHandle realSelected = data.outputValue(aRealSelected, &status);
 	CHECK_MSTATUS_AND_RETURN_IT(status);
-	MFnMatrixData outputInvWorldD(outputWorldInv.data(), &status);
-	CHECK_MSTATUS_AND_RETURN_IT(status);
-
-	double target[3];
-
-	MMatrix outputM = targetWorldD.matrix()*outputInvWorldD.matrix();
-
-	MTransformationMatrix o(outputM);
-	/*o.getTranslation(MSpace::kWorld).get(target);
-
-
-	MDataHandle output = data.outputValue(aFollowerOut, &status);
+	MDataHandle fakeSelected = data.outputValue(aFakeSelected, &status);
 	CHECK_MSTATUS_AND_RETURN_IT(status);
 
-	output.set3Double(target[0], target[1], target[2]);
-	output.setClean();*/
+	realSelected.setBool(ik);
+	fakeSelected.setBool(!ik);
 
-	/*if (followerJointConnected) {
-		MGlobal::displayInfo("follower joint connected, setting transform");
-		MFnIkJoint followerJoint = this->followerJoint;
-		followerJoint.set(o);
-	}*/
+	// update the callback functions
+	updateMatchTransform(ik);
 
 	data.setClean(plug);
 
 	return MS::kSuccess;
 }
-
-// Called when input node is dirty
-/*void inputNodeDirty(MObject &node, MPlug &plug, void *clientData) {
-	MStatus status;
-
-	MFnIkJoint joint(node);
-
-	double worldTranslation[3];
-	joint.getTranslation(MSpace::kObject, &status).get(worldTranslation);
-	
-	MString str = "X: ";
-	str += worldTranslation[0];
-	str += " Y: ";
-	str += worldTranslation[1];
-	str += " Z: ";
-	str += worldTranslation[2];
-	MGlobal::displayInfo(str);
-
-	// match the input with the follower node
-	IkFkSwitchNode *n = (IkFkSwitchNode *)clientData;
-	if (n->followerJointConnected) {
-		MGlobal::displayInfo("follower joint connected, matching");
-		MFnIkJoint follower = n->followerJoint;
-		follower.set(joint.transformationMatrix());
-	}
-}*/
 
 // Match transforms the input nodes with the array of
 // joints contained in clientData
@@ -173,15 +126,29 @@ MStatus IkFkSwitchNode::connectionMade(const MPlug &plug, const MPlug &otherPlug
 		cerr << "real " << i << ": " << connectedRealJoints.at(i).object().apiTypeStr() << endl;
 	}
 
+	// update based on reals initially
+	updateMatchTransform(true);
+
+	return MStatus::kUnknownParameter;
+}
+
+// updates the match transform constraint using either the real or the fake joints
+void IkFkSwitchNode::updateMatchTransform(bool realJoints) {
 	// detach callbacks
 	detachCallbacks();
 
 	// re-register callbacks with the needed data
 	for (int i = 0; i < std::min(connectedFakeJoints.size(), connectedRealJoints.size()); i++) {
+		// if the fake or the real mobjecthandle is not a kJoint then it represents the end of the joints
+		// to match
+		if (connectedFakeJoints[i].object().apiType() != MFn::kJoint || 
+			connectedRealJoints[i].object().apiType() != MFn::kJoint) {
+			break;
+		}
 		// attach a callback that makes the fake move with the real.
 		// TODO: make this toggleable (real follow fake vs. fake follow real)
 		// make a JointMatchInfo object to assist
-		if (plug == aRealJoints) {
+		if (realJoints) {
 			int parentIdx = i + 1;
 			if (parentIdx >= connectedFakeJoints.size()) {
 				parentIdx = connectedFakeJoints.size() - 1; // if it's the end of the joint chain then it's its own parent
@@ -193,33 +160,38 @@ MStatus IkFkSwitchNode::connectionMade(const MPlug &plug, const MPlug &otherPlug
 			MCallbackId id = MNodeMessage::addNodeDirtyPlugCallback(thisJoint, matchTransformCallback, static_cast<void*>(info));
 			MGlobal::displayInfo("Attach callback (fake follow real)");
 			realJointCallbackIds.push_back(id);
-		} else if (plug == aFakeJoints) {
+		}
+		else {
+			int parentIdx = i + 1;
+			if (parentIdx >= connectedRealJoints.size()) {
+				parentIdx = connectedRealJoints.size() - 1; // if it's the end of the joint chain then it's its own parent
+			}
+			MObject targetParent = connectedRealJoints[parentIdx].object();
+			MObject targetJoint = connectedRealJoints[i].object();
+			MObject thisJoint = connectedFakeJoints[i].object();
+			JointMatchInfo *info = new JointMatchInfo(i, connectedFakeJoints, MObjectHandle(targetParent), MObjectHandle(targetJoint));
+			MCallbackId id = MNodeMessage::addNodeDirtyPlugCallback(thisJoint, matchTransformCallback, static_cast<void*>(info));
 			MGlobal::displayInfo("Attach callback (real follow fake)");
+			fakeJointCallbackIds.push_back(id);
 		}
 	}
-
-	return MStatus::kUnknownParameter;
 }
 
-// Called when a connection is broken
+// Called when a connection is broken, or the node is deleted and connections are broken as a result
 MStatus IkFkSwitchNode::connectionBroken(const MPlug &plug, const MPlug &otherPlug, bool asSrc) {
-	// when disconnecting a joint stop the
-	// callback function but keep the
-	// pointer to the joint in the array (but allow replacement)
-	// because it still needs to be used for calculations
+	// when disconnecting a joint stop all the callbacks
+	// this will allow us to delete the whole node without lingering callbacks
+	// and the system will still update on new attachments
 	if (plug == aFakeJoints || plug == aRealJoints) {
-		// if there is a callback connected
-		unsigned int jointIdx = plug.logicalIndex();
-		if (plug == aFakeJoints && fakeJointCallbackIds.size() > jointIdx) {
-			MGlobal::displayInfo("Detach real to fake callback (disconnected node)");
-			MNodeMessage::removeCallback(fakeJointCallbackIds[jointIdx]);
+		detachCallbacks();
+		MGlobal::displayInfo("detach all callbacks");
+		// replaces it with an empty mobject
+		if (plug == aRealJoints) {
+			connectedRealJoints[plug.logicalIndex()] = MObjectHandle(MObject());
 		}
-		if(plug == aRealJoints && realJointCallbackIds.size() > jointIdx) {
-			MGlobal::displayInfo("Detach fake to real callback (disconnected node)");
-			MNodeMessage::removeCallback(realJointCallbackIds[jointIdx]);
+		else {
+			connectedFakeJoints[plug.logicalIndex()] = MObjectHandle(MObject());
 		}
-		// is this below functionality needed?
-		// mark this interrupt specially to not reconnect it when a new joint is connected
 	}
 
 	return MStatus::kUnknownParameter;
@@ -229,43 +201,13 @@ MStatus IkFkSwitchNode::initialize() {
 	
 	MStatus status;
 
-	/*MFnNumericAttribute numAttrib;
-	MFnTypedAttribute attrib;*/
+	MFnNumericAttribute attrib;
 	MFnMessageAttribute messAttrib;
 
-	/*aFollowerOut = numAttrib.create("followerOut", "followerOut", MFnNumericData::k3Double, 0, &status);
-	CHECK_MSTATUS_AND_RETURN_IT(status);
-	numAttrib.setStorable(false);
-	numAttrib.setWritable(false);
-	numAttrib.setKeyable(false);
-	addAttribute(aFollowerOut);*/
-
-	/*aFollowerMessage = messAttrib.create("followerMessage", "followerMessage", &status);
-	CHECK_MSTATUS_AND_RETURN_IT(status);
-	addAttribute(aFollowerMessage);
-
-	aTargetM = attrib.create("targetWorldMatrix", "targetWorldMatrix", MFnData::kMatrix, &status);
-	CHECK_MSTATUS_AND_RETURN_IT(status);
-	addAttribute(aTargetM);
-	attributeAffects(aTargetM, aFollowerMessage);
-	attributeAffects(aFollowerInvWorldM, aFollowerMessage);
-
-	aFollowerInvWorldM = attrib.create("followerParentInvM", "followerParentInvM", MFnData::kMatrix, &status);
-	CHECK_MSTATUS_AND_RETURN_IT(status);
-	addAttribute(aFollowerInvWorldM);
-	attributeAffects(aFollowerInvWorldM, aFollowerMessage);
-
-	inputMessage = messAttrib.create("inputMessage", "inputMessage", &status);
-	CHECK_MSTATUS_AND_RETURN_IT(status);
-	addAttribute(inputMessage);
-
-	aToggleMatch = numAttrib.create("toggleMatch", "toggleMatch", MFnNumericData::kBoolean, 0, &status);
-	CHECK_MSTATUS_AND_RETURN_IT(status);
-	numAttrib.setKeyable(true);
-	addAttribute(aToggleMatch);
-	attributeAffects(aToggleMatch, aFollowerMessage);*/
-
+	// create takes the arguments long name, short name where
+	// all short names must be unique
 	aFakeJoints = messAttrib.create("fakeJoints", "fakeJoints", &status);
+	// don't forget the MStatus
 	CHECK_MSTATUS_AND_RETURN_IT(status);
 	messAttrib.setArray(true);
 	addAttribute(aFakeJoints);
@@ -274,6 +216,25 @@ MStatus IkFkSwitchNode::initialize() {
 	CHECK_MSTATUS_AND_RETURN_IT(status);
 	messAttrib.setArray(true);
 	addAttribute(aRealJoints);
+
+	aRealSelected = attrib.create("realSelected", "realSelected", MFnNumericData::kBoolean, false, &status);
+	attrib.setKeyable(false);
+	CHECK_MSTATUS_AND_RETURN_IT(status);
+	addAttribute(aRealSelected);
+
+	aFakeSelected = attrib.create("fakeSelected", "fakeSelected", MFnNumericData::kBoolean, false, &status);
+	attrib.setKeyable(false);
+	CHECK_MSTATUS_AND_RETURN_IT(status);
+	addAttribute(aFakeSelected);
+
+	aSwitchBool = attrib.create("switchIkFk", "switchIkFk", MFnNumericData::kBoolean, false, &status);
+	CHECK_MSTATUS_AND_RETURN_IT(status);
+	attrib.setKeyable(false);
+	addAttribute(aSwitchBool);
+	status = attributeAffects(aSwitchBool, aRealSelected);
+	CHECK_MSTATUS_AND_RETURN_IT(status);
+	status = attributeAffects(aSwitchBool, aFakeSelected);
+	CHECK_MSTATUS_AND_RETURN_IT(status);
 
 	return MS::kSuccess;
 }

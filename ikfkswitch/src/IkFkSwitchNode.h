@@ -28,22 +28,12 @@ public:
 	static MStatus initialize();
 	virtual MStatus connectionMade(const MPlug &plug, const MPlug &otherPlug, bool asSrc);
 	virtual MStatus connectionBroken(const MPlug &plug, const MPlug &otherPlug, bool asSrc);
-
-	/*MObject inputJoint;
-	MObject followerJoint;
-	bool inputJointConnected = false;
-	bool followerJointConnected = false;*/
+	void updateMatchTransform(bool realJoints);
 
 	static MTypeId id;
-	/*static MObject aFollowerOut;
-	static MObject aTargetM;
-	static MObject aToggleMatch;
-	static MObject aFollowerInvWorldM;
-	static MObject inputMessage;
-	static MObject aFollowerMessage;*/
 
-	static MObject aFakeJoints;
-	static MObject aRealJoints;
+	static MObject aFakeJoints, aRealJoints, aRealSelected, 
+				   aFakeSelected, aSwitchBool;
 
 	// vectors which contain the real and fake joints connected
 	// to this node instance
