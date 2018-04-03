@@ -15,6 +15,7 @@
 #include <maya/MFnIkJoint.h>
 #include <maya/MNodeMessage.h>
 #include <maya/MObjectHandle.h>
+#include <maya/MSelectionList.h>
 #include <algorithm>
 #include <vector>
 #include "JointMatchInfo.h"

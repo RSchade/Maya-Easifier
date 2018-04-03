@@ -58,6 +58,44 @@ MStatus IkFkSwitchNode::compute(const MPlug & plug, MDataBlock & data) {
 	// update the callback functions
 	updateMatchTransform(ik);
 
+	// DEBUG: print out selection
+	MSelectionList list;
+	status = MGlobal::getActiveSelectionList(list);
+	CHECK_MSTATUS_AND_RETURN_IT(status);
+	// Check the two lists for matching selections then swap them over
+	for (int i = 0; i < list.length(); i++) {
+		MObject n;
+		list.getDependNode(i, n);
+		// n is a selected node, see if this matches a real or fake node and
+		// swap it over
+		for (int j = 0; j < connectedFakeJoints.size(); j++) {
+			MObject fake = connectedFakeJoints[j].object();
+			MString fakeName = ((MFnDependencyNode)fake).name();
+			MObject real = connectedRealJoints[j].object();
+			MString realName = ((MFnDependencyNode)real).name();
+			if (n == fake) {
+				// deselect this side
+				MGlobal::unselectByName(fakeName);
+				// select the other side
+				MGlobal::selectByName(realName);
+				MGlobal::displayInfo("SELECT REAL INSTEAD");
+			}
+			else if (n == real) {
+				// deselect this side
+				MGlobal::unselectByName(realName);
+				// select the other side
+				MGlobal::selectByName(fakeName);
+				MGlobal::displayInfo("SELECT FAKE INSTEAD");
+			}
+		}
+	}
+	MStringArray strs;
+	list.getSelectionStrings(strs);
+	MGlobal::displayInfo("SELECTED");
+	for (int i = 0; i < strs.length(); i++) {
+		MGlobal::displayInfo(strs[i]);
+	}
+
 	data.setClean(plug);
 
 	return MS::kSuccess;
@@ -146,7 +184,6 @@ void IkFkSwitchNode::updateMatchTransform(bool realJoints) {
 			break;
 		}
 		// attach a callback that makes the fake move with the real.
-		// TODO: make this toggleable (real follow fake vs. fake follow real)
 		// make a JointMatchInfo object to assist
 		if (realJoints) {
 			int parentIdx = i + 1;
@@ -204,10 +241,7 @@ MStatus IkFkSwitchNode::initialize() {
 	MFnNumericAttribute attrib;
 	MFnMessageAttribute messAttrib;
 
-	// create takes the arguments long name, short name where
-	// all short names must be unique
 	aFakeJoints = messAttrib.create("fakeJoints", "fakeJoints", &status);
-	// don't forget the MStatus
 	CHECK_MSTATUS_AND_RETURN_IT(status);
 	messAttrib.setArray(true);
 	addAttribute(aFakeJoints);
