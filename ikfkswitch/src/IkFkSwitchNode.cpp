@@ -52,49 +52,46 @@ MStatus IkFkSwitchNode::compute(const MPlug & plug, MDataBlock & data) {
 	MDataHandle fakeSelected = data.outputValue(aFakeSelected, &status);
 	CHECK_MSTATUS_AND_RETURN_IT(status);
 
+	bool changed = realSelected.asBool() ^ ik;
+
 	realSelected.setBool(ik);
 	fakeSelected.setBool(!ik);
 
-	// update the callback functions
-	updateMatchTransform(ik);
-
-	// DEBUG: print out selection
 	MSelectionList list;
 	status = MGlobal::getActiveSelectionList(list);
 	CHECK_MSTATUS_AND_RETURN_IT(status);
-	// Check the two lists for matching selections then swap them over
-	for (int i = 0; i < list.length(); i++) {
-		MObject n;
-		list.getDependNode(i, n);
-		// n is a selected node, see if this matches a real or fake node and
-		// swap it over
-		for (int j = 0; j < connectedFakeJoints.size(); j++) {
-			MObject fake = connectedFakeJoints[j].object();
-			MString fakeName = ((MFnDependencyNode)fake).name();
-			MObject real = connectedRealJoints[j].object();
-			MString realName = ((MFnDependencyNode)real).name();
-			if (n == fake) {
-				// deselect this side
-				MGlobal::unselectByName(fakeName);
-				// select the other side
-				MGlobal::selectByName(realName);
-				MGlobal::displayInfo("SELECT REAL INSTEAD");
-			}
-			else if (n == real) {
-				// deselect this side
-				MGlobal::unselectByName(realName);
-				// select the other side
-				MGlobal::selectByName(fakeName);
-				MGlobal::displayInfo("SELECT FAKE INSTEAD");
+	if (changed) {
+		// update the callback functions (only on an update in ik/fk state)
+		updateMatchTransform(ik);
+		// Check the two lists for matching selections then swap them over
+		for (int i = 0; i < list.length(); i++) {
+			MObject n;
+			list.getDependNode(i, n);
+			// n is a selected node, see if this matches a real or fake node and
+			// swap it over
+			for (int j = 0; j < connectedFakeJoints.size(); j++) {
+				MObject fake = connectedFakeJoints[j].object();
+				MString fakeName = ((MFnDependencyNode)fake).name();
+				MObject real = connectedRealJoints[j].object();
+				MString realName = ((MFnDependencyNode)real).name();
+				if (n == fake) {
+					// deselect this side
+					MGlobal::unselectByName(fakeName);
+					// select the other side
+					MGlobal::selectByName(realName);
+					MGlobal::displayInfo("SELECT REAL INSTEAD");
+				}
+				else if (n == real) {
+					// deselect this side
+					MGlobal::unselectByName(realName);
+					// select the other side
+					MGlobal::selectByName(fakeName);
+					MGlobal::displayInfo("SELECT FAKE INSTEAD");
+				}
 			}
 		}
 	}
-	MStringArray strs;
-	list.getSelectionStrings(strs);
 	MGlobal::displayInfo("SELECTED");
-	for (int i = 0; i < strs.length(); i++) {
-		MGlobal::displayInfo(strs[i]);
-	}
 
 	data.setClean(plug);
 
@@ -263,7 +260,7 @@ MStatus IkFkSwitchNode::initialize() {
 
 	aSwitchBool = attrib.create("switchIkFk", "switchIkFk", MFnNumericData::kBoolean, false, &status);
 	CHECK_MSTATUS_AND_RETURN_IT(status);
-	attrib.setKeyable(false);
+	attrib.setKeyable(true);
 	addAttribute(aSwitchBool);
 	status = attributeAffects(aSwitchBool, aRealSelected);
 	CHECK_MSTATUS_AND_RETURN_IT(status);
